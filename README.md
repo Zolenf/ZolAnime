@@ -2,6 +2,10 @@
 
 A application for watching anime add free with sync on different devices
 
+## About
+
+ZolAnime is an app that allows you easily watch your favourite anime without having to deal with ads. Also the biggest feature is automatic synchronization between devices so you can stop your watching session on pc and hop on phone right away with episode starting in exact time you finished last time. (app autosaves progress 0.3 sec after stopping video so for it to work properly try to wait a little after stopping and then leave)
+
 ## setup
 You need an Anilist (https://anilist.co) account to use it inside the app.
 When you log in, Zolanime will sync your watching progress with Anilist database
