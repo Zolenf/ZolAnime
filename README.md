@@ -1,4 +1,5 @@
 # zolanime
+#WARNING, PROJECT UNDER MAINTANENCE BECAUSE OF SERVER ARCHITECTURE DEFECT
 
 A application for watching anime add free with sync on different devices
 
