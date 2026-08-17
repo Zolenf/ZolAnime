@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 import 'pages/mainPage.dart';
+import 'api/updater.dart';
 
 final ValueNotifier<List<String>> appLogs = ValueNotifier<List<String>>([]);
 
@@ -61,6 +62,7 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndLoginAniList();
+      AppUpdater.checkForUpdates(context);
     });
   }
 
