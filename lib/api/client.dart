@@ -5,7 +5,7 @@ import '../models/episodes.dart';
 import '../models/stream_data.dart';
 
 String anilist = 'https://graphql.anilist.co';
-String anivexa = 'redacted';
+String anivexa = 'https://anivexa-api-qg31.onrender.com/';
 
 Future<String> _getToken() async {
   final prefs = await SharedPreferences.getInstance();
@@ -103,18 +103,19 @@ Future<({int progress, String notes})> fetchUserProgress(int mediaId) async {
 Future<({bool hasSub, bool hasDub})> fetchSubDub(int animeId) async {
   try {
     final stopwatch = Stopwatch()..start();
+
+    // Tutaj ten sam zoptymalizowany adres
+    final String fastProviders =
+        'reanime/anikoto/anineko/anidbapp/2dhive/anizone/senshi/animedunya';
     final response = await http.get(
-      Uri.parse('${anivexa}episodes/$animeId'),
+      Uri.parse('${anivexa}episodes/$fastProviders/$animeId'),
       headers: {'Content-Type': 'application/json', 'x-api-key': 'halo'},
     );
+
     stopwatch.stop();
     print(
-      "⏳ Czas API: ${stopwatch.elapsedMilliseconds}ms | Status: ${response.statusCode}",
+      "⏳ Czas API (SubDub): ${stopwatch.elapsedMilliseconds}ms | Status: ${response.statusCode}",
     );
-    print(
-      "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
-    );
-    print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
 
     if (response.statusCode != 200) {
       return (hasSub: false, hasDub: false);
@@ -172,15 +173,19 @@ Future<StreamResponse> fetchStreamDetails(String streamIdPath) async {
 
 Future<AnimeEpisodes> fetchAnimeEpisodes(int id) async {
   final stopwatch = Stopwatch()..start();
-  final response = await http.get(Uri.parse('${anivexa}episodes/$id'));
+
+  // Zamiast wolnego '${anivexa}episodes/$id', przekazujemy
+  // listę sprawdzonych, błyskawicznych dostawców z pominięciem blokującego mkissa.
+  final String fastProviders =
+      'reanime/anikoto/anineko/anidbapp/2dhive/anizone/senshi/animedunya';
+  final response = await http.get(
+    Uri.parse('${anivexa}episodes/$fastProviders/$id'),
+  );
+
   stopwatch.stop();
   print(
-    "⏳ Czas API: ${stopwatch.elapsedMilliseconds}ms | Status: ${response.statusCode}",
+    "⏳ Czas API (Odcinki): ${stopwatch.elapsedMilliseconds}ms | Status: ${response.statusCode}",
   );
-  print(
-    "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
-  );
-  print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
 
   if (response.statusCode != 200) {
     throw Exception("Failed to load episodes");

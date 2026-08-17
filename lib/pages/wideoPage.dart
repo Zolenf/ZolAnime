@@ -20,7 +20,7 @@ class _WideopageState extends State<Wideopage> {
   late final VideoController _controller;
   late final Future<AnimeEpisodes> _episodesFuture;
 
-  String _selectedProvider = 'anineko';
+  String _selectedProvider = 'anikoto';
   String _selectedAudio = 'dub';
   dynamic _currentEpisode;
   AnimeEpisodes? _animeData;
@@ -31,7 +31,7 @@ class _WideopageState extends State<Wideopage> {
   final Set<int> _savedEpisodesSession = {};
 
   String? _subUrl;
-  bool _subsOn = true;
+  bool _subsOn = false;
 
   bool _autoplayEnabled = true;
   bool _autoSkipIntroEnabled = true;
@@ -49,7 +49,13 @@ class _WideopageState extends State<Wideopage> {
   @override
   void initState() {
     super.initState();
-    _player = Player();
+    _player = Player(
+      configuration: const PlayerConfiguration(
+        // Zmniejszamy bufor z domyślnego poziomu na ok. 10-15 MB.
+        // Dzięki temu mpv przestanie spamować serwer zapytaniami o 50 segmentów w przód.
+        bufferSize: 1024 * 1024 * 15,
+      ),
+    );
     _setupPlayer();
     _setupListeners();
     _episodesFuture = fetchAnimeEpisodes(widget.animeId);
@@ -124,7 +130,7 @@ class _WideopageState extends State<Wideopage> {
       final double currentSecs = position.inMilliseconds / 1000.0;
       final int totalSecs = _player.state.duration.inSeconds;
 
-      if (totalSecs == 0 || currentSecs < 2.0) return;
+      if (totalSecs == 0 || currentSecs < 1.0) return;
 
       if (!_hasSeekedToSavedTime && _currentEpisode != null) {
         _hasSeekedToSavedTime = true;
@@ -276,10 +282,6 @@ class _WideopageState extends State<Wideopage> {
       }
     }
 
-    print(
-      "🕒 FAKTYCZNE CZASY - INTRO: $_introStart -> $_introEnd | OUTRO: $_outroStart -> $_outroEnd",
-    );
-
     final String? streamPath =
         episode.sources[_selectedProvider]?[_selectedAudio]?.id;
     if (streamPath == null) return;
@@ -299,12 +301,29 @@ class _WideopageState extends State<Wideopage> {
                       0,
                 ),
       );
+
       var bestStream =
           streamData.bestHls ?? (valid.isNotEmpty ? valid.first : null);
+
       try {
         bestStream = valid.firstWhere((s) => s.url.contains('workers.dev'));
       } catch (_) {}
+
       if (bestStream == null || !mounted) return;
+
+      if (bestStream.introStart != null && bestStream.introEnd != null) {
+        _introStart = bestStream.introStart;
+        _introEnd = bestStream.introEnd;
+      }
+      if (bestStream.outroStart != null && bestStream.outroEnd != null) {
+        _outroStart = bestStream.outroStart;
+        _outroEnd = bestStream.outroEnd;
+      }
+
+      print(
+        "🕒 FAKTYCZNE CZASY - INTRO: $_introStart -> $_introEnd | OUTRO: $_outroStart -> $_outroEnd",
+      );
+
       String finalReferer = bestStream.url.contains('kwik')
           ? 'https://kwik.cx/'
           : (bestStream.referer ?? 'https://anineko.to/');
@@ -315,16 +334,15 @@ class _WideopageState extends State<Wideopage> {
           httpHeaders: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/120.0.0',
             'Referer': finalReferer,
+            'Origin': finalReferer, // Często wymagane przez vivibebe
           },
         ),
       );
 
-      _subUrl = null;
-      if (bestStream.embedUrl != null &&
-          bestStream.embedUrl!.contains('?sub=')) {
-        _subUrl = bestStream.embedUrl!.split('?sub=').last.split('&').first;
-        print("STREAM URL: ${bestStream.embedUrl}");
-        print("SUBTITLES URL: $_subUrl");
+      _subUrl = streamData.subtitleUrl;
+
+      if (_subUrl != null) {
+        print("✅ ZNALEZIONO SUBTITLES URL: $_subUrl");
 
         if (_subsOn) {
           Future.microtask(() async {
@@ -345,14 +363,19 @@ class _WideopageState extends State<Wideopage> {
                   RegExp(r'(\r?\n){2,}(?!\d{2}:\d{2})'),
                   '\n',
                 );
-                await Future.delayed(const Duration(milliseconds: 300));
+                await Future.delayed(const Duration(milliseconds: 100));
                 _player.setSubtitleTrack(SubtitleTrack.data(fixedVtt));
+                print("✅ Napisy załadowane poprawnie.");
+              } else {
+                print("⚠️ Błąd pobierania napisów: Kod ${subRes.statusCode}");
               }
             } catch (e) {
-              print("⚠️ Błąd pobierania napisów: $e");
+              print("⚠️ Wyjątek przy pobieraniu napisów: $e");
             }
           });
         }
+      } else {
+        print("⚠️ Ten strumień nie posiada osadzonych napisów w API.");
       }
     } catch (e) {
       print("Błąd: $e");
@@ -384,7 +407,7 @@ class _WideopageState extends State<Wideopage> {
       if (_animeData != null && _animeData!.episodes.isNotEmpty) {
         return _animeData!.episodes.values.first.sources.keys.toList();
       }
-      return ['anineko', 'reanime'];
+      return ['anikoto', 'anineko'];
     }
     return _currentEpisode.sources.keys.toList();
   }

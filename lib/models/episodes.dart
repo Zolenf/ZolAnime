@@ -100,9 +100,18 @@ class AnimeEpisodes {
             final number = (epJson['number'] as num).toInt();
 
             if (!animeEps.episodes.containsKey(number)) {
+              // Czyścimy encje HTML z tytułu
+              String rawTitle = epJson['title'] ?? 'Odcinek $number';
+              String cleanTitle = rawTitle
+                  .replaceAll('&#39;', "'")
+                  .replaceAll('&quot;', '"')
+                  .replaceAll('&amp;', '&')
+                  .replaceAll('&lt;', '<')
+                  .replaceAll('&gt;', '>');
+
               animeEps.episodes[number] = EpisodeDetails(
                 number: number,
-                title: epJson['title'] ?? 'Odcinek $number',
+                title: cleanTitle,
                 description: epJson['description'] ?? 'Brak opisu.',
                 image: epJson['image'] ?? '',
                 airDate: epJson['airDate'] ?? '',
