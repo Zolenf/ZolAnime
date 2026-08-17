@@ -3,8 +3,9 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:zolanime/api/client.dart';
 import '../models/episodes.dart';
+import '../models/stream_data.dart';
 import 'package:http/http.dart' as http;
-import '../main.dart'; // DODAŁEM IMPORT DO OBSŁUGI KONSOLI (Dopasuj ścieżkę jeśli główny plik jest gdzie indziej)
+import '../main.dart';
 
 class Wideopage extends StatefulWidget {
   final int animeId;
@@ -19,6 +20,8 @@ class _WideopageState extends State<Wideopage> {
   late final Player _player;
   late final VideoController _controller;
   late final Future<AnimeEpisodes> _episodesFuture;
+  List<VideoStream> _availableSubServers = [];
+  VideoStream? _selectedSubServer;
 
   String _selectedProvider = 'anikoto';
   String _selectedAudio = 'dub';
@@ -50,11 +53,7 @@ class _WideopageState extends State<Wideopage> {
   void initState() {
     super.initState();
     _player = Player(
-      configuration: const PlayerConfiguration(
-        // Zmniejszamy bufor z domyślnego poziomu na ok. 10-15 MB.
-        // Dzięki temu mpv przestanie spamować serwer zapytaniami o 50 segmentów w przód.
-        bufferSize: 1024 * 1024 * 15,
-      ),
+      configuration: const PlayerConfiguration(bufferSize: 1024 * 1024 * 15),
     );
     _setupPlayer();
     _setupListeners();
@@ -231,6 +230,31 @@ class _WideopageState extends State<Wideopage> {
     }
   }
 
+  void _changeSubServerAndPlay(VideoStream server) {
+    if (server.introStart != null && server.introEnd != null) {
+      _introStart = server.introStart;
+      _introEnd = server.introEnd;
+    }
+    if (server.outroStart != null && server.outroEnd != null) {
+      _outroStart = server.outroStart;
+      _outroEnd = server.outroEnd;
+    }
+
+    String finalReferer = server.url.contains('kwik')
+        ? 'https://kwik.cx/'
+        : (server.referer ?? 'https://anineko.to/');
+
+    _player.open(
+      Media(
+        server.url,
+        httpHeaders: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/120.0.0',
+          'Referer': finalReferer,
+        },
+      ),
+    );
+  }
+
   Future<void> _loadVideoForEpisode(dynamic episode) async {
     if (episode == null) return;
 
@@ -291,6 +315,7 @@ class _WideopageState extends State<Wideopage> {
       final valid = streamData.streams
           .where((s) => s.type == 'hls' || s.type == 'mp4')
           .toList();
+
       valid.sort(
         (a, b) =>
             (int.tryParse(b.quality?.replaceAll(RegExp(r'\D'), '') ?? '0') ?? 0)
@@ -302,39 +327,44 @@ class _WideopageState extends State<Wideopage> {
                 ),
       );
 
-      var bestStream =
-          streamData.bestHls ?? (valid.isNotEmpty ? valid.first : null);
+      if (valid.isEmpty || !mounted) return;
 
-      try {
-        bestStream = valid.firstWhere((s) => s.url.contains('workers.dev'));
-      } catch (_) {}
+      setState(() {
+        _availableSubServers = valid;
 
-      if (bestStream == null || !mounted) return;
+        if (_selectedSubServer == null ||
+            !_availableSubServers.any(
+              (s) => s.server == _selectedSubServer!.server,
+            )) {
+          _selectedSubServer = streamData.bestHls ?? valid.first;
+        }
+      });
 
-      if (bestStream.introStart != null && bestStream.introEnd != null) {
-        _introStart = bestStream.introStart;
-        _introEnd = bestStream.introEnd;
+      var streamToPlay = _selectedSubServer!;
+
+      if (streamToPlay.introStart != null && streamToPlay.introEnd != null) {
+        _introStart = streamToPlay.introStart;
+        _introEnd = streamToPlay.introEnd;
       }
-      if (bestStream.outroStart != null && bestStream.outroEnd != null) {
-        _outroStart = bestStream.outroStart;
-        _outroEnd = bestStream.outroEnd;
+      if (streamToPlay.outroStart != null && streamToPlay.outroEnd != null) {
+        _outroStart = streamToPlay.outroStart;
+        _outroEnd = streamToPlay.outroEnd;
       }
 
       print(
         "🕒 FAKTYCZNE CZASY - INTRO: $_introStart -> $_introEnd | OUTRO: $_outroStart -> $_outroEnd",
       );
 
-      String finalReferer = bestStream.url.contains('kwik')
+      String finalReferer = streamToPlay.url.contains('kwik')
           ? 'https://kwik.cx/'
-          : (bestStream.referer ?? 'https://anineko.to/');
+          : (streamToPlay.referer ?? 'https://anineko.to/');
 
       _player.open(
         Media(
-          bestStream.url,
+          streamToPlay.url,
           httpHeaders: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/120.0.0',
             'Referer': finalReferer,
-            'Origin': finalReferer, // Często wymagane przez vivibebe
           },
         ),
       );
@@ -450,7 +480,6 @@ class _WideopageState extends State<Wideopage> {
     }
   }
 
-  // --- LOGIKA WYSKAKUJĄCEJ KONSOLI ---
   void _openDebugConsole(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -458,8 +487,7 @@ class _WideopageState extends State<Wideopage> {
       backgroundColor: Colors.black87,
       builder: (context) {
         return Container(
-          height:
-              MediaQuery.of(context).size.height * 0.75, // Zajmuje 75% ekranu
+          height: MediaQuery.of(context).size.height * 0.75,
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -484,8 +512,7 @@ class _WideopageState extends State<Wideopage> {
               const Divider(color: Colors.white30),
               Expanded(
                 child: ValueListenableBuilder<List<String>>(
-                  valueListenable:
-                      appLogs, // Słuchamy globalnych logów z main.dart
+                  valueListenable: appLogs,
                   builder: (context, logs, child) {
                     return ListView.builder(
                       itemCount: logs.length,
@@ -547,7 +574,6 @@ class _WideopageState extends State<Wideopage> {
           ),
           title: Text(widget.animeTitle),
           actions: [
-            // PRZYCISK KONSOLI
             IconButton(
               icon: const Icon(Icons.terminal, color: Colors.greenAccent),
               tooltip: "Otwórz logi",
@@ -575,12 +601,10 @@ class _WideopageState extends State<Wideopage> {
             Positioned.fill(
               child: Container(color: Colors.black.withAlpha(120)),
             ),
-
             LayoutBuilder(
               builder: (context, constraints) {
                 final isDesktop = constraints.maxWidth > 800;
 
-                // USUNIĘTO SingleChildScrollView
                 final leftSide = Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: _buildLeftSide(
@@ -589,6 +613,8 @@ class _WideopageState extends State<Wideopage> {
                     currentAudio: _selectedAudio,
                     availableProviders: availableProviders,
                     availableAudio: availableAudio,
+                    availableSubServers: _availableSubServers,
+                    currentSubServer: _selectedSubServer,
                     autoplayEnabled: _autoplayEnabled,
                     autoSkipIntro: _autoSkipIntroEnabled,
                     autoSkipOutro: _autoSkipOutroEnabled,
@@ -597,6 +623,10 @@ class _WideopageState extends State<Wideopage> {
                     onProviderChanged: (p) {
                       setState(() => _selectedProvider = p);
                       _loadVideoForEpisode(_currentEpisode);
+                    },
+                    onSubServerChanged: (server) {
+                      setState(() => _selectedSubServer = server);
+                      _changeSubServerAndPlay(server);
                     },
                     onAudioChanged: (a) {
                       setState(() => _selectedAudio = a);
@@ -633,7 +663,6 @@ class _WideopageState extends State<Wideopage> {
 
                 return isDesktop
                     ? Row(
-                        // ZMIANA: stretch wymusza, by kolumny dopasowały się do wysokości ekranu
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(flex: 7, child: leftSide),
@@ -661,6 +690,8 @@ class _buildLeftSide extends StatelessWidget {
   final String currentAudio;
   final List<String> availableProviders;
   final List<String> availableAudio;
+  final List<VideoStream> availableSubServers;
+  final VideoStream? currentSubServer;
   final bool autoplayEnabled;
   final bool autoSkipIntro;
   final bool autoSkipOutro;
@@ -668,6 +699,7 @@ class _buildLeftSide extends StatelessWidget {
   final VoidCallback onToggleSubs;
 
   final ValueChanged<String> onProviderChanged;
+  final ValueChanged<VideoStream> onSubServerChanged;
   final ValueChanged<String> onAudioChanged;
   final ValueChanged<bool> onAutoplayChanged;
   final ValueChanged<bool> onSkipIntroChanged;
@@ -681,10 +713,13 @@ class _buildLeftSide extends StatelessWidget {
     required this.currentAudio,
     required this.availableProviders,
     required this.availableAudio,
+    required this.availableSubServers,
+    required this.currentSubServer,
     required this.autoplayEnabled,
     required this.autoSkipIntro,
     required this.autoSkipOutro,
     required this.onProviderChanged,
+    required this.onSubServerChanged,
     required this.onAudioChanged,
     required this.onAutoplayChanged,
     required this.onSkipIntroChanged,
@@ -815,6 +850,26 @@ class _buildLeftSide extends StatelessWidget {
                 if (val != null) onProviderChanged(val);
               },
             ),
+            if (availableSubServers.isNotEmpty)
+              DropdownButton<VideoStream>(
+                dropdownColor: Colors.grey[900],
+                value: currentSubServer,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+                items: availableSubServers.map((serverData) {
+                  return DropdownMenuItem<VideoStream>(
+                    value: serverData,
+                    child: Text(serverData.server.toUpperCase()),
+                  );
+                }).toList(),
+                onChanged: (VideoStream? newServer) {
+                  if (newServer != null) {
+                    onSubServerChanged(newServer);
+                  }
+                },
+              ),
             DropdownButton<String>(
               dropdownColor: Colors.grey[900],
               value: currentAudio,

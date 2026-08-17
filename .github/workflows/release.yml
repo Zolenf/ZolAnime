@@ -1,0 +1,64 @@
+name: Build and Release Zolanime
+
+# Ten skrypt odpali się tylko wtedy, gdy stworzysz nowy tag w Gicie, np. v1.0.0
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build & Release
+    # Używamy maszyny z Windowsem, bo tylko na Windowsie skompilujesz aplikację .exe dla Fluttera
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      # 1. Pobranie Twojego kodu z repozytorium
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Instalacja i konfiguracja Fluttera (używa oficjalnej akcji)
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+
+      # 3. Pobranie paczek z pubspec.yaml
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 4. Włączenie wsparcia dla desktopów (na wszelki wypadek)
+      - name: Enable Desktop Support
+        run: flutter config --enable-windows-desktop
+
+      # 5. Budowanie wersji na Windows (tworzy pliki .exe)
+      - name: Build Windows App
+        run: flutter build windows --release
+
+      # 6. Spakowanie plików Windowsa do archiwum .zip (GitHub woli zipy niż czyste .exe)
+      - name: Compress Windows Build
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Zolanime-Windows.zip
+
+      # 7. Budowanie wersji na Androida (tworzy plik .apk)
+      # Pamiętaj: Jeśli używasz paczek Media Kit, upewnij się, że masz ustawione odpowiednie minSDK w plikach Androida!
+      - name: Build Android App
+        run: flutter build apk --release
+
+      # 8. Zmiana nazwy pliku APK dla czytelności
+      - name: Rename APK
+        run: mv build\app\outputs\flutter-apk\app-release.apk Zolanime-Android.apk
+
+      # 9. Publikacja do GitHub Releases
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Ta opcja automatycznie utworzy Release oznaczając go Twoim tagiem
+          name: Release ${{ github.ref_name }}
+          files: |
+            Zolanime-Windows.zip
+            Zolanime-Android.apk
+          # GITHUB_TOKEN jest wbudowany, nie musisz go nigdzie konfigurować
+          token: ${{ secrets.GITHUB_TOKEN }}
