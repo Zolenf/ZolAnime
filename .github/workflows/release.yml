@@ -30,7 +30,7 @@ jobs:
 
       # Budowanie instalatora MSIX dla Windowsa
       - name: Build MSIX Package
-        run: dart run msix:create --release
+        run: dart run msix:create
 
       - name: Rename MSIX
         run: mv build/windows/x64/runner/Release/zolanime.msix Zolanime-Windows-Installer.msix
