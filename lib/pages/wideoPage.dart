@@ -55,6 +55,8 @@ class _WideopageState extends State<Wideopage> {
   bool _hasSeekedToSavedTime = false;
   bool _canPop = false;
 
+  int? _resumeTimeSecs;
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +127,7 @@ class _WideopageState extends State<Wideopage> {
       episodeToLoad = _cachedEpisodesList.last;
     }
     setState(() => _currentEpisode = episodeToLoad);
+    _resumeTimeSecs = null;
     _loadVideoForEpisode(episodeToLoad);
   }
 
@@ -144,6 +147,7 @@ class _WideopageState extends State<Wideopage> {
         'sub-clear-on-seek',
         'yes',
       );
+      await (_player.platform as dynamic).setProperty('hr-seek', 'yes');
     }
   }
 
@@ -162,7 +166,13 @@ class _WideopageState extends State<Wideopage> {
       final double currentSecs = position.inMilliseconds / 1000.0;
       final int totalSecs = _player.state.duration.inSeconds;
 
-      if (totalSecs == 0 || currentSecs < 1.0) return;
+      if (totalSecs == 0 || currentSecs < 0.5) return;
+
+      if (_resumeTimeSecs != null && currentSecs > 0.5) {
+        _player.seek(Duration(seconds: _resumeTimeSecs!));
+        _resumeTimeSecs = null;
+        return;
+      }
 
       if (!_hasSeekedToSavedTime && _currentEpisode != null) {
         _hasSeekedToSavedTime = true;
@@ -175,7 +185,7 @@ class _WideopageState extends State<Wideopage> {
 
             if (savedEpNum == _currentEpisode.number) {
               if (secs > 2) {
-                _player.seek(Duration(seconds: secs));
+                _resumeTimeSecs = secs;
                 return;
               }
             }
@@ -224,6 +234,7 @@ class _WideopageState extends State<Wideopage> {
         if (currentSecs >= _outroStart! && currentSecs < _outroEnd!) {
           _outroSkipped = true;
           _player.seek(Duration(milliseconds: (_outroEnd! * 1000).toInt()));
+          return;
         }
       }
 
@@ -280,16 +291,19 @@ class _WideopageState extends State<Wideopage> {
       _outroEnd = server.outroEnd;
     }
 
-    String finalReferer = server.url.contains('kwik')
+    String targetUrl = server.url;
+    String finalReferer = targetUrl.contains('kwik')
         ? 'https://kwik.cx/'
         : (server.referer ?? 'https://anineko.to/');
 
+    String proxyBase = 'https://anivexa-proxy.zolanime.workers.dev';
+    String proxiedUrl = '$proxyBase/proxy?url=$targetUrl|$finalReferer';
+
     _player.open(
       Media(
-        server.url,
+        proxiedUrl,
         httpHeaders: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/120.0.0',
-          'Referer': finalReferer,
         },
       ),
     );
@@ -399,16 +413,19 @@ class _WideopageState extends State<Wideopage> {
         _outroEnd = streamToPlay.outroEnd;
       }
 
-      String finalReferer = streamToPlay.url.contains('kwik')
+      String targetUrl = streamToPlay.url;
+      String finalReferer = targetUrl.contains('kwik')
           ? 'https://kwik.cx/'
           : (streamToPlay.referer ?? 'https://anineko.to/');
 
+      String proxyBase = 'https://anivexa-proxy.zolanime.workers.dev';
+      String proxiedUrl = '$proxyBase/proxy?url=$targetUrl|$finalReferer';
+
       _player.open(
         Media(
-          streamToPlay.url,
+          proxiedUrl,
           httpHeaders: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/120.0.0',
-            'Referer': finalReferer,
           },
         ),
       );
@@ -461,6 +478,7 @@ class _WideopageState extends State<Wideopage> {
     if (currentIndex != -1 && currentIndex < _cachedEpisodesList.length - 1) {
       await _saveCurrentTime();
       final nextEpisode = _cachedEpisodesList[currentIndex + 1];
+      _resumeTimeSecs = null;
       setState(() => _currentEpisode = nextEpisode);
       _loadVideoForEpisode(nextEpisode);
     }
@@ -471,7 +489,7 @@ class _WideopageState extends State<Wideopage> {
       if (_animeData != null && _animeData!.episodes.isNotEmpty) {
         return _animeData!.episodes.values.first.sources.keys.toList();
       }
-      return ['anikoto', 'anineko'];
+      return [];
     }
     return _currentEpisode.sources.keys.toList();
   }
@@ -510,6 +528,7 @@ class _WideopageState extends State<Wideopage> {
       _player.setSubtitleTrack(SubtitleTrack.no());
     } else {
       if (_subUrl != null && _currentEpisode != null) {
+        _resumeTimeSecs = _player.state.position.inSeconds;
         _loadVideoForEpisode(_currentEpisode);
       }
     }
@@ -658,16 +677,19 @@ class _WideopageState extends State<Wideopage> {
                     subsEnabled: _subsOn,
                     onToggleSubs: _toggleSubs,
                     onProviderChanged: (p) {
+                      _resumeTimeSecs = _player.state.position.inSeconds;
                       setState(() => _selectedProvider = p);
                       _saveSetting('provider', p);
                       _loadVideoForEpisode(_currentEpisode);
                     },
                     onSubServerChanged: (server) {
+                      _resumeTimeSecs = _player.state.position.inSeconds;
                       setState(() => _selectedSubServer = server);
                       _saveSetting('subserver', server.server);
                       _changeSubServerAndPlay(server);
                     },
                     onAudioChanged: (a) {
+                      _resumeTimeSecs = _player.state.position.inSeconds;
                       setState(() => _selectedAudio = a);
                       _saveSetting('audio', a);
                       _loadVideoForEpisode(_currentEpisode);
@@ -702,6 +724,7 @@ class _WideopageState extends State<Wideopage> {
                   },
                   onEpisodeSelected: (ep) async {
                     await _saveCurrentTime();
+                    _resumeTimeSecs = null;
                     setState(() => _currentEpisode = ep);
                     _loadVideoForEpisode(ep);
                   },
