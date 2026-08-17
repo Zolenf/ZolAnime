@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -5,6 +6,7 @@ import 'package:zolanime/api/client.dart';
 import '../models/episodes.dart';
 import '../models/stream_data.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 
 class Wideopage extends StatefulWidget {
@@ -22,6 +24,7 @@ class _WideopageState extends State<Wideopage> {
   late final Future<AnimeEpisodes> _episodesFuture;
   List<VideoStream> _availableSubServers = [];
   VideoStream? _selectedSubServer;
+  String? _savedSubServerName;
 
   String _selectedProvider = 'anikoto';
   String _selectedAudio = 'dub';
@@ -45,6 +48,9 @@ class _WideopageState extends State<Wideopage> {
   bool _introSkipped = false;
   bool _outroSkipped = false;
 
+  bool _showSkipIntroButton = false;
+  bool _showSkipOutroButton = false;
+
   bool _isVideoSafeToSave = false;
   bool _hasSeekedToSavedTime = false;
   bool _canPop = false;
@@ -59,7 +65,35 @@ class _WideopageState extends State<Wideopage> {
     _setupListeners();
     _episodesFuture = fetchAnimeEpisodes(widget.animeId);
     _controller = VideoController(_player);
-    _initProgress();
+    _initializeData();
+  }
+
+  Future<void> _initializeData() async {
+    await _loadSettings();
+    await _initProgress();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _autoplayEnabled = prefs.getBool('autoplay') ?? true;
+      _autoSkipIntroEnabled = prefs.getBool('skip_intro') ?? true;
+      _autoSkipOutroEnabled = prefs.getBool('skip_outro') ?? true;
+      _subsOn = prefs.getBool('subs_on') ?? false;
+      _selectedProvider = prefs.getString('provider') ?? 'anikoto';
+      _selectedAudio = prefs.getString('audio') ?? 'dub';
+      _savedSubServerName = prefs.getString('subserver');
+    });
+  }
+
+  Future<void> _saveSetting(String key, dynamic value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value is bool) {
+      await prefs.setBool(key, value);
+    } else if (value is String) {
+      await prefs.setString(key, value);
+    }
   }
 
   Future<void> _initProgress() async {
@@ -121,7 +155,6 @@ class _WideopageState extends State<Wideopage> {
     _player.stream.playing.listen((isPlaying) {
       if (!isPlaying && _isVideoSafeToSave) {
         _saveCurrentTime();
-        print("Saved");
       }
     });
 
@@ -143,7 +176,6 @@ class _WideopageState extends State<Wideopage> {
             if (savedEpNum == _currentEpisode.number) {
               if (secs > 2) {
                 _player.seek(Duration(seconds: secs));
-                print("Wznowiono odcinek z zapisanego czasu: $secs s");
                 return;
               }
             }
@@ -180,10 +212,6 @@ class _WideopageState extends State<Wideopage> {
           _introEnd != null) {
         if (currentSecs >= _introStart! && currentSecs < _introEnd!) {
           _introSkipped = true;
-
-          print(
-            "⚡ [SKIP] Wykryto Intro! Przewijam z $currentSecs na $_introEnd",
-          );
           _player.seek(Duration(milliseconds: (_introEnd! * 1000).toInt()));
           return;
         }
@@ -195,11 +223,24 @@ class _WideopageState extends State<Wideopage> {
           _outroEnd != null) {
         if (currentSecs >= _outroStart! && currentSecs < _outroEnd!) {
           _outroSkipped = true;
-          print(
-            "⚡ [SKIP] Wykryto Outro! Przewijam z $currentSecs na $_outroEnd",
-          );
           _player.seek(Duration(milliseconds: (_outroEnd! * 1000).toInt()));
         }
+      }
+
+      final inIntro =
+          _introStart != null &&
+          currentSecs >= _introStart! &&
+          currentSecs < _introEnd!;
+      final inOutro =
+          _outroStart != null &&
+          currentSecs >= _outroStart! &&
+          currentSecs < _outroEnd!;
+
+      if (_showSkipIntroButton != inIntro || _showSkipOutroButton != inOutro) {
+        setState(() {
+          _showSkipIntroButton = inIntro;
+          _showSkipOutroButton = inOutro;
+        });
       }
     });
   }
@@ -215,7 +256,6 @@ class _WideopageState extends State<Wideopage> {
     if (secs > 5) {
       final note = "ep:$epNum,time:$secs";
       if (_savedNotes != note) {
-        print("Zapisywanie punktu wstrzymania: $note");
         await saveProgress(widget.animeId, _watchedEpisodes!, note);
         _savedNotes = note;
       }
@@ -267,13 +307,17 @@ class _WideopageState extends State<Wideopage> {
     _hasSeekedToSavedTime = false;
     _isVideoSafeToSave = false;
 
+    setState(() {
+      _showSkipIntroButton = false;
+      _showSkipOutroButton = false;
+    });
+
     if (_animeData != null) {
       final localSkips = _animeData!.skipTimes
           .where((s) => s.episode == episode.number)
           .toList();
 
       if (localSkips.isNotEmpty) {
-        print("📂 Wczytano lokalne skipy zapisane w Anivexa!");
         for (var skip in localSkips) {
           if (skip.type == 'op') {
             _introStart = skip.start;
@@ -284,9 +328,6 @@ class _WideopageState extends State<Wideopage> {
           }
         }
       } else if (_animeData!.malId != null) {
-        print(
-          "☁️ Brak lokalnych skipów. Pytam zewnętrzną bazę AniSkip dla MAL ID: ${_animeData!.malId}...",
-        );
         final externalSkips = await fetchAniSkip(
           _animeData!.malId!,
           episode.number,
@@ -301,8 +342,6 @@ class _WideopageState extends State<Wideopage> {
             _outroEnd = skip.end;
           }
         }
-      } else {
-        print("❌ Brak MAL ID w metadanych. Nie można zapytać AniSkip.");
       }
     }
 
@@ -331,12 +370,22 @@ class _WideopageState extends State<Wideopage> {
 
       setState(() {
         _availableSubServers = valid;
-        final match = valid.where(
-          (s) => s.server == _selectedSubServer?.server,
-        );
+
+        Iterable<VideoStream> match;
+        if (_selectedSubServer != null) {
+          match = valid.where((s) => s.server == _selectedSubServer?.server);
+        } else if (_savedSubServerName != null) {
+          match = valid.where((s) => s.server == _savedSubServerName);
+        } else {
+          match = [];
+        }
+
         _selectedSubServer = match.isNotEmpty
             ? match.first
             : (streamData.bestHls ?? valid.first);
+
+        _savedSubServerName = _selectedSubServer!.server;
+        _saveSetting('subserver', _savedSubServerName);
       });
 
       var streamToPlay = _selectedSubServer!;
@@ -349,10 +398,6 @@ class _WideopageState extends State<Wideopage> {
         _outroStart = streamToPlay.outroStart;
         _outroEnd = streamToPlay.outroEnd;
       }
-
-      print(
-        "🕒 FAKTYCZNE CZASY - INTRO: $_introStart -> $_introEnd | OUTRO: $_outroStart -> $_outroEnd",
-      );
 
       String finalReferer = streamToPlay.url.contains('kwik')
           ? 'https://kwik.cx/'
@@ -371,8 +416,6 @@ class _WideopageState extends State<Wideopage> {
       _subUrl = streamData.subtitleUrl;
 
       if (_subUrl != null) {
-        print("✅ ZNALEZIONO SUBTITLES URL: $_subUrl");
-
         if (_subsOn) {
           Future.microtask(() async {
             try {
@@ -394,20 +437,12 @@ class _WideopageState extends State<Wideopage> {
                 );
                 await Future.delayed(const Duration(milliseconds: 100));
                 _player.setSubtitleTrack(SubtitleTrack.data(fixedVtt));
-                print("✅ Napisy załadowane poprawnie.");
-              } else {
-                print("⚠️ Błąd pobierania napisów: Kod ${subRes.statusCode}");
               }
-            } catch (e) {
-              print("⚠️ Wyjątek przy pobieraniu napisów: $e");
-            }
+            } catch (e) {}
           });
         }
-      } else {
-        print("⚠️ Ten strumień nie posiada osadzonych napisów w API.");
       }
     } catch (e) {
-      print("Błąd: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -470,6 +505,7 @@ class _WideopageState extends State<Wideopage> {
 
   void _toggleSubs() {
     setState(() => _subsOn = !_subsOn);
+    _saveSetting('subs_on', _subsOn);
     if (!_subsOn) {
       _player.setSubtitleTrack(SubtitleTrack.no());
     } else {
@@ -617,26 +653,37 @@ class _WideopageState extends State<Wideopage> {
                     autoplayEnabled: _autoplayEnabled,
                     autoSkipIntro: _autoSkipIntroEnabled,
                     autoSkipOutro: _autoSkipOutroEnabled,
+                    showSkipIntroButton: _showSkipIntroButton,
+                    showSkipOutroButton: _showSkipOutroButton,
                     subsEnabled: _subsOn,
                     onToggleSubs: _toggleSubs,
                     onProviderChanged: (p) {
                       setState(() => _selectedProvider = p);
+                      _saveSetting('provider', p);
                       _loadVideoForEpisode(_currentEpisode);
                     },
                     onSubServerChanged: (server) {
                       setState(() => _selectedSubServer = server);
+                      _saveSetting('subserver', server.server);
                       _changeSubServerAndPlay(server);
                     },
                     onAudioChanged: (a) {
                       setState(() => _selectedAudio = a);
+                      _saveSetting('audio', a);
                       _loadVideoForEpisode(_currentEpisode);
                     },
-                    onAutoplayChanged: (v) =>
-                        setState(() => _autoplayEnabled = v),
-                    onSkipIntroChanged: (v) =>
-                        setState(() => _autoSkipIntroEnabled = v),
-                    onSkipOutroChanged: (v) =>
-                        setState(() => _autoSkipOutroEnabled = v),
+                    onAutoplayChanged: (v) {
+                      setState(() => _autoplayEnabled = v);
+                      _saveSetting('autoplay', v);
+                    },
+                    onSkipIntroChanged: (v) {
+                      setState(() => _autoSkipIntroEnabled = v);
+                      _saveSetting('skip_intro', v);
+                    },
+                    onSkipOutroChanged: (v) {
+                      setState(() => _autoSkipOutroEnabled = v);
+                      _saveSetting('skip_outro', v);
+                    },
                     onManualSkipIntro: () => _manualSkip(true),
                     onManualSkipOutro: () => _manualSkip(false),
                   ),
@@ -694,6 +741,8 @@ class _buildLeftSide extends StatelessWidget {
   final bool autoplayEnabled;
   final bool autoSkipIntro;
   final bool autoSkipOutro;
+  final bool showSkipIntroButton;
+  final bool showSkipOutroButton;
   final bool subsEnabled;
   final VoidCallback onToggleSubs;
 
@@ -717,6 +766,8 @@ class _buildLeftSide extends StatelessWidget {
     required this.autoplayEnabled,
     required this.autoSkipIntro,
     required this.autoSkipOutro,
+    required this.showSkipIntroButton,
+    required this.showSkipOutroButton,
     required this.onProviderChanged,
     required this.onSubServerChanged,
     required this.onAudioChanged,
@@ -737,16 +788,68 @@ class _buildLeftSide extends StatelessWidget {
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Video(
-              controller: controller,
-              subtitleViewConfiguration: const SubtitleViewConfiguration(
-                style: TextStyle(
-                  backgroundColor: Colors.black54,
-                  fontSize: 50,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Video(
+                    controller: controller,
+                    subtitleViewConfiguration: const SubtitleViewConfiguration(
+                      style: TextStyle(
+                        backgroundColor: Colors.black54,
+                        fontSize: 50,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                if (showSkipIntroButton || showSkipOutroButton)
+                  Positioned(
+                    right: 32,
+                    bottom: 80,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: showSkipIntroButton
+                                ? onManualSkipIntro
+                                : onManualSkipOutro,
+                            child: Container(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.fast_forward,
+                                    size: 18,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    showSkipIntroButton
+                                        ? "Pomiń Intro"
+                                        : "Pomiń Outro",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -811,24 +914,6 @@ class _buildLeftSide extends StatelessWidget {
                 size: 16,
               ),
               label: Text("Napisy: ${subsEnabled ? 'ON' : 'OFF'}"),
-            ),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.purple),
-              ),
-              onPressed: onManualSkipIntro,
-              icon: const Icon(Icons.fast_forward, size: 16),
-              label: const Text("Skip Intro"),
-            ),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.purple),
-              ),
-              onPressed: onManualSkipOutro,
-              icon: const Icon(Icons.skip_next, size: 16),
-              label: const Text("Skip Outro"),
             ),
             DropdownButton<String>(
               dropdownColor: Colors.grey[900],
