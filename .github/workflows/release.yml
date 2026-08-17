@@ -31,26 +31,30 @@ jobs:
       - name: Enable Desktop Support
         run: flutter config --enable-windows-desktop
 
-      # Budowanie instalatora MSIX dla Windowsa
+      # WYMUSZAMY BUDOWANIE WINDOWSA (msix:create sam tego czasem nie robi)
+      - name: Build Windows App
+        run: flutter build windows --release
+
+      # Budowanie instalatora MSIX
       - name: Build MSIX Package
         run: dart run msix:create --install-certificate false
 
       - name: Rename MSIX
-        run: mv build/windows/x64/runner/Release/zolanime.msix Zolanime-Windows-Installer.msix
+        run: mv build/windows/x64/runner/Release/*.msix Zolanime-Windows-Installer.msix
 
       # Budowanie APK na Androida
       - name: Build Android App
         run: flutter build apk --release
 
       - name: Rename APK
-        run: mv build\app\outputs\flutter-apk\app-release.apk Zolanime-Android-Installer.apk
+        run: mv build/app/outputs/flutter-apk/app-release.apk Zolanime-Android-Installer.apk
 
-      # Publikacja MSIX i APK do GitHub Releases
+      # Publikacja wygenerowanych plików ze zaktualizowanymi nazwami
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
           files: |
-            build/windows/x64/runner/Release/*.msix
-            Zolanime-Android.apk
+            Zolanime-Windows-Installer.msix
+            Zolanime-Android-Installer.apk
           token: ${{ secrets.GITHUB_TOKEN }}
