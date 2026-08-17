@@ -1,11 +1,10 @@
 name: zolanime
 description: "An simple anime app for watching anime made by Zolenf"
 publish_to: "none"
-version: 2.2.0+0
+version: 2.2.1+0
 
 environment:
   sdk: ^3.12.0
-
 dependencies:
   flutter:
     sdk: flutter
