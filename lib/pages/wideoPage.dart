@@ -168,7 +168,7 @@ class _WideopageState extends State<Wideopage> {
           saveProgress(widget.animeId, currentEpNum, "");
 
           setState(() {
-            _watchedEpisodes = currentEpNum - 1;
+            _watchedEpisodes = currentEpNum;
             _savedNotes = "";
           });
         }
@@ -331,13 +331,12 @@ class _WideopageState extends State<Wideopage> {
 
       setState(() {
         _availableSubServers = valid;
-
-        if (_selectedSubServer == null ||
-            !_availableSubServers.any(
-              (s) => s.server == _selectedSubServer!.server,
-            )) {
-          _selectedSubServer = streamData.bestHls ?? valid.first;
-        }
+        final match = valid.where(
+          (s) => s.server == _selectedSubServer?.server,
+        );
+        _selectedSubServer = match.isNotEmpty
+            ? match.first
+            : (streamData.bestHls ?? valid.first);
       });
 
       var streamToPlay = _selectedSubServer!;
