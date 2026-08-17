@@ -1,6 +1,4 @@
 # zolanime
-# WARNING, PROJECT UNDER MAINTANENCE BECAUSE OF SERVER ARCHITECTURE DEFECT. NEW VERSION SHOULD BE DONE IN 1-2 DAYS. CHECK RELEASES
-
 A application for watching anime add free with sync on different devices
 
 ## About
