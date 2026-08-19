@@ -26,7 +26,7 @@ class _WideopageState extends State<Wideopage> {
   VideoStream? _selectedSubServer;
   String? _savedSubServerName;
 
-  String _selectedProvider = 'anikoto';
+  String _selectedProvider = 'kiwi';
   String _selectedAudio = 'dub';
   dynamic _currentEpisode;
   AnimeEpisodes? _animeData;
@@ -83,7 +83,7 @@ class _WideopageState extends State<Wideopage> {
       _autoSkipIntroEnabled = prefs.getBool('skip_intro') ?? true;
       _autoSkipOutroEnabled = prefs.getBool('skip_outro') ?? true;
       _subsOn = prefs.getBool('subs_on') ?? false;
-      _selectedProvider = prefs.getString('provider') ?? 'anikoto';
+      _selectedProvider = prefs.getString('provider') ?? 'kiwi';
       _selectedAudio = prefs.getString('audio') ?? 'dub';
       _savedSubServerName = prefs.getString('subserver');
     });
@@ -282,15 +282,6 @@ class _WideopageState extends State<Wideopage> {
   }
 
   void _changeSubServerAndPlay(VideoStream server) {
-    if (server.introStart != null && server.introEnd != null) {
-      _introStart = server.introStart;
-      _introEnd = server.introEnd;
-    }
-    if (server.outroStart != null && server.outroEnd != null) {
-      _outroStart = server.outroStart;
-      _outroEnd = server.outroEnd;
-    }
-
     String targetUrl = server.url;
     String finalReferer = targetUrl.contains('kwik')
         ? 'https://kwik.cx/'
@@ -304,6 +295,7 @@ class _WideopageState extends State<Wideopage> {
         proxiedUrl,
         httpHeaders: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64) Chrome/120.0.0',
+          'ngrok-skip-browser-warning': 'true',
         },
       ),
     );
@@ -382,6 +374,15 @@ class _WideopageState extends State<Wideopage> {
 
       if (valid.isEmpty || !mounted) return;
 
+      if (streamData.introStart != null && streamData.introEnd != null) {
+        _introStart = streamData.introStart;
+        _introEnd = streamData.introEnd;
+      }
+      if (streamData.outroStart != null && streamData.outroEnd != null) {
+        _outroStart = streamData.outroStart;
+        _outroEnd = streamData.outroEnd;
+      }
+
       setState(() {
         _availableSubServers = valid;
 
@@ -403,15 +404,6 @@ class _WideopageState extends State<Wideopage> {
       });
 
       var streamToPlay = _selectedSubServer!;
-
-      if (streamToPlay.introStart != null && streamToPlay.introEnd != null) {
-        _introStart = streamToPlay.introStart;
-        _introEnd = streamToPlay.introEnd;
-      }
-      if (streamToPlay.outroStart != null && streamToPlay.outroEnd != null) {
-        _outroStart = streamToPlay.outroStart;
-        _outroEnd = streamToPlay.outroEnd;
-      }
 
       String targetUrl = streamToPlay.url;
       String finalReferer = targetUrl.contains('kwik')

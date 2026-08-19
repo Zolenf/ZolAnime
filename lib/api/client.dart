@@ -6,6 +6,7 @@ import '../models/stream_data.dart';
 
 String anilist = 'https://graphql.anilist.co';
 String anivexa = 'https://anivexa-api-qg31.onrender.com/';
+String miruro = 'https://hunk-unadorned-uncoated.ngrok-free.dev/';
 
 Future<String> _getToken() async {
   final prefs = await SharedPreferences.getInstance();
@@ -18,7 +19,7 @@ Future<String> _getUsername() async {
 }
 
 Future<Map<String, dynamic>> fetchAnimeByStatus(String status) async {
-  final username = await _getUsername(); // Dynamiczna nazwa profilu
+  final username = await _getUsername();
   final String query =
       '''
     query {
@@ -47,12 +48,12 @@ Future<Map<String, dynamic>> fetchAnimeByStatus(String status) async {
   print(
     "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
   );
-  print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
+  print("🚨 Body: ${response.body}");
   return jsonDecode(response.body);
 }
 
 Future<({int progress, String notes})> fetchUserProgress(int mediaId) async {
-  final username = await _getUsername(); // Dynamiczna nazwa profilu
+  final username = await _getUsername();
   final String query =
       '''
     query (\$mediaId: Int) {
@@ -85,7 +86,7 @@ Future<({int progress, String notes})> fetchUserProgress(int mediaId) async {
     print(
       "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
     );
-    print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
+    print("🚨 Body: ${response.body}");
 
     final data = jsonDecode(response.body);
     if (data['data'] != null && data['data']['MediaList'] != null) {
@@ -104,42 +105,63 @@ Future<({bool hasSub, bool hasDub})> fetchSubDub(int animeId) async {
   try {
     final stopwatch = Stopwatch()..start();
 
-    // Tutaj ten sam zoptymalizowany adres
     final String fastProviders =
         'reanime/anikoto/anineko/anidbapp/2dhive/anizone/senshi/animedunya';
-    final response = await http.get(
+
+    final mResFuture = http.get(
+      Uri.parse('${miruro}episodes/$animeId'),
+      headers: {'ngrok-skip-browser-warning': 'true'},
+    );
+    final aResFuture = http.get(
       Uri.parse('${anivexa}episodes/$fastProviders/$animeId'),
       headers: {'Content-Type': 'application/json', 'x-api-key': 'halo'},
     );
 
+    final responses = await Future.wait([mResFuture, aResFuture]);
+    final mRes = responses[0];
+    final aRes = responses[1];
+
     stopwatch.stop();
-    print(
-      "⏳ Czas API (SubDub): ${stopwatch.elapsedMilliseconds}ms | Status: ${response.statusCode}",
-    );
+    print("⏳ Czas API (SubDub): ${stopwatch.elapsedMilliseconds}ms");
 
-    if (response.statusCode != 200) {
-      return (hasSub: false, hasDub: false);
-    }
-
-    final data = jsonDecode(response.body);
     bool hasSub = false;
     bool hasDub = false;
 
-    data.forEach((key, value) {
-      if (key == 'page' ||
-          key == 'type' ||
-          key == 'mappings' ||
-          key == 'animepahe' ||
-          value == null)
-        return;
-      if (value is Map<String, dynamic> && value.containsKey('episodes')) {
-        final epsMap = value['episodes'] as Map<String, dynamic>;
-        if (epsMap['sub'] != null && (epsMap['sub'] as List).isNotEmpty)
-          hasSub = true;
-        if (epsMap['dub'] != null && (epsMap['dub'] as List).isNotEmpty)
-          hasDub = true;
+    void checkEpisodes(Map<String, dynamic> epsMap) {
+      if (epsMap['sub'] != null && (epsMap['sub'] as List).isNotEmpty) {
+        hasSub = true;
       }
-    });
+      if (epsMap['dub'] != null && (epsMap['dub'] as List).isNotEmpty) {
+        hasDub = true;
+      }
+    }
+
+    if (mRes.statusCode == 200) {
+      final mData = jsonDecode(mRes.body);
+      if (mData['providers'] != null) {
+        final providers = mData['providers'] as Map<String, dynamic>;
+        providers.forEach((_, v) {
+          if (v is Map<String, dynamic> && v.containsKey('episodes')) {
+            checkEpisodes(v['episodes']);
+          }
+        });
+      }
+    }
+
+    if (aRes.statusCode == 200) {
+      final aData = jsonDecode(aRes.body);
+      aData.forEach((key, value) {
+        if (key == 'page' ||
+            key == 'type' ||
+            key == 'mappings' ||
+            key == 'animepahe' ||
+            value == null)
+          return;
+        if (value is Map<String, dynamic> && value.containsKey('episodes')) {
+          checkEpisodes(value['episodes']);
+        }
+      });
+    }
 
     return (hasSub: hasSub, hasDub: hasDub);
   } catch (e) {
@@ -149,11 +171,20 @@ Future<({bool hasSub, bool hasDub})> fetchSubDub(int animeId) async {
 }
 
 Future<StreamResponse> fetchStreamDetails(String streamIdPath) async {
-  final fullUrl = streamIdPath.startsWith('http')
-      ? streamIdPath
-      : '$anivexa$streamIdPath';
+  String fullUrl;
+  if (streamIdPath.startsWith('http')) {
+    fullUrl = streamIdPath;
+  } else if (streamIdPath.startsWith('watch/')) {
+    fullUrl = '$miruro$streamIdPath';
+  } else {
+    fullUrl = '$anivexa$streamIdPath';
+  }
+
   final stopwatch = Stopwatch()..start();
-  final response = await http.get(Uri.parse(fullUrl));
+  final response = await http.get(
+    Uri.parse(fullUrl),
+    headers: {'ngrok-skip-browser-warning': 'true'},
+  );
   stopwatch.stop();
   print(
     "⏳ Czas API: ${stopwatch.elapsedMilliseconds}ms | Status: ${response.statusCode}",
@@ -161,7 +192,7 @@ Future<StreamResponse> fetchStreamDetails(String streamIdPath) async {
   print(
     "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
   );
-  print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
+  print("🚨 Body: ${response.body}");
 
   if (response.statusCode != 200) {
     throw Exception("Błąd pobierania strumienia: ${response.statusCode}");
@@ -174,25 +205,52 @@ Future<StreamResponse> fetchStreamDetails(String streamIdPath) async {
 Future<AnimeEpisodes> fetchAnimeEpisodes(int id) async {
   final stopwatch = Stopwatch()..start();
 
-  // Zamiast wolnego '${anivexa}episodes/$id', przekazujemy
-  // listę sprawdzonych, błyskawicznych dostawców z pominięciem blokującego mkissa.
   final String fastProviders =
       'reanime/anikoto/anineko/anidbapp/2dhive/anizone/senshi/animedunya';
-  final response = await http.get(
+
+  final mResFuture = http.get(
+    Uri.parse('${miruro}episodes/$id'),
+    headers: {'ngrok-skip-browser-warning': 'true'},
+  );
+  final aResFuture = http.get(
     Uri.parse('${anivexa}episodes/$fastProviders/$id'),
   );
 
-  stopwatch.stop();
-  print(
-    "⏳ Czas API (Odcinki): ${stopwatch.elapsedMilliseconds}ms | Status: ${response.statusCode}",
-  );
+  final responses = await Future.wait([mResFuture, aResFuture]);
+  final mRes = responses[0];
+  final aRes = responses[1];
 
-  if (response.statusCode != 200) {
+  stopwatch.stop();
+  print("⏳ Czas API (Odcinki): ${stopwatch.elapsedMilliseconds}ms");
+
+  Map<String, dynamic> finalJson = {};
+
+  if (mRes.statusCode == 200) {
+    try {
+      final mData = jsonDecode(mRes.body);
+      if (mData['mappings'] != null) finalJson['mappings'] = mData['mappings'];
+      if (mData['providers'] != null)
+        finalJson['providers'] = mData['providers'];
+    } catch (e) {}
+  }
+
+  if (aRes.statusCode == 200) {
+    try {
+      final aData = jsonDecode(aRes.body);
+      finalJson['mappings'] ??= aData['mappings'];
+      aData.forEach((k, v) {
+        if (k != 'mappings' && k != 'page' && k != 'type') {
+          finalJson[k] = v;
+        }
+      });
+    } catch (e) {}
+  }
+
+  if (finalJson.isEmpty) {
     throw Exception("Failed to load episodes");
   }
 
-  final data = jsonDecode(response.body);
-  return AnimeEpisodes.fromJson(data);
+  return AnimeEpisodes.fromJson(finalJson);
 }
 
 Future<bool> saveProgress(int mediaId, int progress, String notes) async {
@@ -226,7 +284,7 @@ Future<bool> saveProgress(int mediaId, int progress, String notes) async {
   print(
     "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
   );
-  print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
+  print("🚨 Body: ${response.body}");
 
   if (response.statusCode == 200) {
     print("Poprawnie zaktualizowano AniList: Odcinek $progress");
@@ -276,7 +334,7 @@ Future<List<dynamic>> searchAnime(String queryStr) async {
     print(
       "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
     );
-    print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
+    print("🚨 Body: ${response.body}");
 
     final data = jsonDecode(response.body);
     if (data['data'] != null && data['data']['Page'] != null) {
@@ -318,7 +376,7 @@ Future<bool> addToWatching(int mediaId) async {
     print(
       "📡 Nagłówki (Rate Limit?): ${response.headers['x-ratelimit-remaining']}",
     );
-    print("🚨 Body: ${response.body}"); // To pokaże dokładny błąd z serwera
+    print("🚨 Body: ${response.body}");
 
     if (response.statusCode == 200) {
       print("Pomyślnie dodano do Watching!");

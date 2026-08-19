@@ -63,27 +63,25 @@ class AniSkip {
 class AnimeEpisodes {
   final Map<int, EpisodeDetails> episodes = {};
   final List<AniSkip> skipTimes = [];
-  int? malId; // <--- DODANO: Przechowuje id z MyAnimeList dla AniSkip
+  int? malId;
 
   AnimeEpisodes();
 
   factory AnimeEpisodes.fromJson(Map<String, dynamic> json) {
     final animeEps = AnimeEpisodes();
 
-    // Łapiemy malId z sekcji mappings
     animeEps.malId = json['mappings']?['malId'];
 
-    // 1. Parsowanie AniSkip (Oparte na mappings z Anivexa)
     final aniskipList = json['mappings']?['aniskip'] as List<dynamic>? ?? [];
     for (var skip in aniskipList) {
       animeEps.skipTimes.add(AniSkip.fromJson(skip));
     }
 
-    // 2. Przemielenie całej reszty JSONa z dostawcami
-    json.forEach((providerName, providerData) {
+    void parseProviderData(String providerName, dynamic providerData) {
       if (providerName == 'page' ||
           providerName == 'type' ||
           providerName == 'mappings' ||
+          providerName == 'providers' ||
           providerName == 'animepahe' ||
           providerData == null) {
         return;
@@ -100,7 +98,6 @@ class AnimeEpisodes {
             final number = (epJson['number'] as num).toInt();
 
             if (!animeEps.episodes.containsKey(number)) {
-              // Czyścimy encje HTML z tytułu
               String rawTitle = epJson['title'] ?? 'Odcinek $number';
               String cleanTitle = rawTitle
                   .replaceAll('&#39;', "'")
@@ -125,6 +122,20 @@ class AnimeEpisodes {
             );
           }
         });
+      }
+    }
+
+    if (json.containsKey('providers') &&
+        json['providers'] is Map<String, dynamic>) {
+      final providersMap = json['providers'] as Map<String, dynamic>;
+      providersMap.forEach((key, value) {
+        parseProviderData(key, value);
+      });
+    }
+
+    json.forEach((key, value) {
+      if (key != 'providers') {
+        parseProviderData(key, value);
       }
     });
 
