@@ -7,6 +7,7 @@ import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 import 'pages/mainPage.dart';
 import 'api/updater.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 final ValueNotifier<List<String>> appLogs = ValueNotifier<List<String>>([]);
 
@@ -24,7 +25,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   runZonedGuarded(
-    () {
+    () async {
       WidgetsFlutterBinding.ensureInitialized();
       MediaKit.ensureInitialized();
 
@@ -32,6 +33,8 @@ void main() {
         logMessage("FLUTTER ERROR: ${details.exceptionAsString()}");
         FlutterError.presentError(details);
       };
+
+      await dotenv.load(fileName: ".env");
 
       runApp(const MyApp());
     },

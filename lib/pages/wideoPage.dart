@@ -8,6 +8,7 @@ import '../models/stream_data.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class Wideopage extends StatefulWidget {
   final int animeId;
@@ -287,7 +288,7 @@ class _WideopageState extends State<Wideopage> {
         ? 'https://kwik.cx/'
         : (server.referer ?? 'https://anineko.to/');
 
-    String proxyBase = 'https://anivexa-proxy.zolanime.workers.dev';
+    String proxyBase = dotenv.env['ANIVEXA_PROXY_URL'] ?? '';
     String proxiedUrl = '$proxyBase/proxy?url=$targetUrl|$finalReferer';
 
     _player.open(
@@ -410,7 +411,7 @@ class _WideopageState extends State<Wideopage> {
           ? 'https://kwik.cx/'
           : (streamToPlay.referer ?? 'https://anineko.to/');
 
-      String proxyBase = 'https://anivexa-proxy.zolanime.workers.dev';
+      String proxyBase = dotenv.env['ANIVEXA_PROXY_URL'] ?? '';
       String proxiedUrl = '$proxyBase/proxy?url=$targetUrl|$finalReferer';
 
       _player.open(

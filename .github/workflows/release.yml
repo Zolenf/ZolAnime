@@ -37,6 +37,11 @@ jobs:
       - name: Enable Desktop Support
         run: flutter config --enable-windows-desktop
 
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+        shell: bash
+
       # WYMUSZAMY BUDOWANIE WINDOWSA (msix:create sam tego czasem nie robi)
       - name: Build Windows App
         run: flutter build windows --release

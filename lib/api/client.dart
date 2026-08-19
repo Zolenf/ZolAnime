@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/episodes.dart';
 import '../models/stream_data.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-String anilist = 'https://graphql.anilist.co';
-String anivexa = 'https://anivexa-api-qg31.onrender.com/';
-String miruro = 'https://hunk-unadorned-uncoated.ngrok-free.dev/';
-
+String anilist = dotenv.env['ANILIST_API_URL'] ?? 'https://graphql.anilist.co';
+String anivexa = dotenv.env['ANIVEXA_API_URL'] ?? '';
+String miruro = dotenv.env['MIRURO_API_URL'] ?? '';
 Future<String> _getToken() async {
   final prefs = await SharedPreferences.getInstance();
   return prefs.getString('anilist_token') ?? '';

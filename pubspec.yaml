@@ -17,6 +17,7 @@ dependencies:
   flutter_web_auth_2: ^5.0.0
   package_info_plus: ^10.2.1
   url_launcher: ^6.3.2
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -27,6 +28,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - .env
+    - assets/icon.png
 
 flutter_launcher_icons:
   android: true
