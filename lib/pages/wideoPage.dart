@@ -27,7 +27,7 @@ class _WideopageState extends State<Wideopage> {
   VideoStream? _selectedSubServer;
   String? _savedSubServerName;
 
-  String _selectedProvider = 'kiwi';
+  String _selectedProvider = 'ally';
   String _selectedAudio = 'dub';
   dynamic _currentEpisode;
   AnimeEpisodes? _animeData;
@@ -929,7 +929,7 @@ class _buildLeftSide extends StatelessWidget {
                 subsEnabled ? Icons.subtitles : Icons.subtitles_off,
                 size: 16,
               ),
-              label: Text("Napisy: ${subsEnabled ? 'ON' : 'OFF'}"),
+              label: Text("Subtitles: ${subsEnabled ? 'ON' : 'OFF'}"),
             ),
             DropdownButton<String>(
               dropdownColor: Colors.grey[900],
